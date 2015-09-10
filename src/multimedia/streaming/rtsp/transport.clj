@@ -9,7 +9,8 @@
   "A `Connection` to an endpoint using a particular
   transport. E.g. tcp or udp."
   (send! [this message] "Sends `message` to the peer.")
-  (receive! [this] "Reads a message from the peer and returns it."))
+  (receive! [this timeout] "Reads a message from the peer and returns it.")
+  (alive? [this] "Returns `true` if the connection is open."))
 
 (defn wrap-duplex-stream
   [tx-fn rx-fn wire]
@@ -29,7 +30,9 @@
   (let [peer (d/chain
               (tcp/client (select-keys url [:host :port]))
               #(wrap-duplex-stream rtsp/encode rtsp/decode %))]
-    (reify
-      Connection
+    (reify Connection
       (send! [this message] (s/put! @peer message))
-      (receive! [this] (s/take! @peer)))))
+      (receive! [this timeout]
+        (let [head (s/try-take! @peer timeout)]
+          head))
+      (alive? [this] (not (s/closed? @peer))))))

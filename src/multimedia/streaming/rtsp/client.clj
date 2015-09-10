@@ -13,6 +13,8 @@
   {:state (atom {:c-seq 1})
    :version "RTSP/1.0"})
 
+(def default-timeout 30000)
+
 (defn split-url [url]
   (let [uri (URI. url)
         port (.getPort uri)]
@@ -35,20 +37,28 @@
 
 (defrecord Session [url version state]
   IRequest
-  (request! [this {:keys [path method headers body]}]
+  (request! [this {:keys [path method headers body timeout]
+                   :or {path "", headers {}, body "", timeout default-timeout}}]
     (let [{c-seq :c-seq
            connection :connection} @state
           rtsp-request {:url (request-target-url url path)
                         :method method
                         :version version
                         :c-seq c-seq
-                        :headers (or headers {})
-                        :body (or body "")}
-          connection (or connection (transport/connect-to url))]
-      (transport/send! connection rtsp-request)
-      (swap! state assoc :connection connection
-             :c-seq (inc c-seq))
-      (transport/receive! connection))))
+                        :headers headers
+                        :body body}
+          connection (if (and connection (transport/alive? connection))
+                       connection
+                       (transport/connect-to url))]
+      (if (transport/send! connection rtsp-request)
+        (do
+          (swap! state assoc :connection connection
+                             :c-seq (inc c-seq))
+          (transport/receive! connection timeout))
+        (do
+          (.close connection)
+          (swap! state dissoc :connection)
+          (deliver (promise) nil))))))
 
 (defn print-session [session writer]
   (.write writer (str "#Session" (select-keys session [:url :version]))))
@@ -63,8 +73,8 @@
   #(print-session % *out*))
 
 (defn session
-  "The `session` function creates a new RTSP session structure with
-  the specified `options` that may be used to commnicate with the RTSP
+  "`session` creates a new RTSP session structure, optionally with the
+  specified `options`, that may be used to commnicate with the RTSP
   server at `url`."
   ([url] (session url {}))
   ([url options]
