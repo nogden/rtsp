@@ -10,8 +10,7 @@
   (request! [this options]))
 
 (def default-session
-  {:state (atom {:connection nil
-                 :c-seq 1})
+  {:state (atom {:c-seq 1})
    :version "RTSP/1.0"})
 
 (defn split-url [url]
@@ -51,10 +50,17 @@
              :c-seq (inc c-seq))
       (transport/receive! connection))))
 
-(defmethod print-method Session [v ^java.io.Writer w]
-  (.write w (str "#Session" (select-keys v [:url :c-seq :version]))))
+(defn print-session [session writer]
+  (.write writer (str "#Session" (select-keys session [:url :version]))))
 
-(prefer-method clojure.pprint/simple-dispatch clojure.lang.IPersistentMap clojure.lang.IDeref)
+(defmethod print-method Session [session ^java.io.Writer writer]
+  (print-session session writer))
+
+(defmethod print-dup Session [session ^java.io.Writer writer]
+  (print-session session writer))
+
+(.addMethod clojure.pprint/simple-dispatch Session
+  #(print-session % *out*))
 
 (defn session
   "The `session` function creates a new RTSP session structure with
