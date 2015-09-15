@@ -2,14 +2,38 @@
   "The `multimedia.streaming.rtsp.protocol` namespace defines
   functions for marshalling between RTSP messages and ring-style
   requests and responses."
-  (:require [clojure.string :as string]))
+  (:require [clojure.string :as string]
+            [gloss.core :as codec])
+  (:import [java.net URI]))
 
 (def default-port 554)
+
+(def default-scheme "rtsp")
 
 (def crlf
   "Newlines in an RTSP request are represented as carrage-return
   followed by line-feed."
   "\r\n")
+
+(defn split-url [url]
+  (let [uri (URI. url)
+        port (.getPort uri)]
+    {:protocol (or (.getScheme uri) default-scheme)
+     :host (.getHost uri)
+     :port (if (pos? port) port default-port)}))
+
+(defn join-url [{:keys [protocol host port]}]
+  (str protocol "://" host \: port))
+
+(defn ensure-absolute [path]
+  (if (re-matches #"^/.+" path)
+    (string/replace path #"^/+" "/")
+    (str "/" path)))
+
+(defn url-for-path [url path]
+  (if (= "*" path)
+    path
+    (str (join-url url) (ensure-absolute path))))
 
 (defn ->header
   "`->header` converts a key-value pair into a header field."
