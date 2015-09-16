@@ -1,38 +1,38 @@
 (ns multimedia.streaming.rtsp.transport
-  (:refer-clojure :exclude [send])
-  (:require [aleph.tcp :as tcp]
+  (:require [multimedia.streaming.rtsp.protocol :as rtsp]
+            [aleph.tcp :as tcp]
             [manifold.deferred :as d]
-            [manifold.stream :as s]
-            [multimedia.streaming.rtsp.protocol :as rtsp]))
+            [manifold.stream :as s]))
 
-(defprotocol Connection
-  "A `Connection` to an endpoint using a particular
-  transport. E.g. tcp or udp."
-  (send! [this message] "Sends `message` to the peer.")
-  (receive! [this timeout] "Reads a message from the peer and returns it.")
-  (alive? [this] "Returns `true` if the connection is open."))
+(defprotocol IRequest
+  "An object that is able to issue requests."
+  (request! [this request]
+    "Sends `request` to the peer and returns a promise that will yield
+     the response."))
+
+(def default-timeout 30000)
 
 (defn wrap-duplex-stream
-  [tx-fn rx-fn wire]
-  (let [tx (s/stream 0 (map tx-fn))
-        rx (s/stream 0 (map rx-fn))]
+  [tx-xform rx-xform wire]
+  (let [tx (s/stream 0 tx-xform)
+        rx (s/stream 0 rx-xform)]
     (s/connect tx wire)
     (s/connect wire rx)
     (s/splice tx rx)))
 
+(defrecord TcpConnection [url wire]
+  IRequest
+  (request! [this request]
+    (d/chain (or @wire (reset! wire (tcp/client url)))
+             #(wrap-duplex-stream rtsp/encode rtsp/decode %)
+             #(s/put! % request)
+             #(s/try-take! % (or (:timeout request) default-timeout)))))
+
 (defmulti connect-to
-  "`connect-to` returns a connection object, suitable for use with
-  `send`, that will manage a connection with the endpoint `uri`. The
-  implementation that is returned is dependant upon the uri scheme."
+  "`connect-to` returns an object that implements `IRequest`, which
+  can be used to issue requests to the peer at `url` using the
+  protocol defined by the url."
   :protocol)
 
 (defmethod connect-to "rtsp" [url]
-  (let [peer (d/chain
-              (tcp/client (select-keys url [:host :port]))
-              #(wrap-duplex-stream rtsp/encode rtsp/decode %))]
-    (reify Connection
-      (send! [this message] (s/put! @peer message))
-      (receive! [this timeout]
-        (let [head (s/try-take! @peer timeout)]
-          head))
-      (alive? [this] (not (s/closed? @peer))))))
+  (->TcpConnection url (atom nil)))

@@ -3,41 +3,24 @@
   interface for the client API."
   (:require [clojure.string :as string]
             [multimedia.streaming.rtsp.protocol :as rtsp]
-            [multimedia.streaming.rtsp.transport :as transport]))
-
-(defprotocol IRequest
-  (request! [this options]))
+            [multimedia.streaming.rtsp.transport :refer [request! connect-to IRequest]]))
 
 (def ^:private default-session
-  {:state (atom {:c-seq 1})
+  {:c-seq (atom 1)
    :version "RTSP/1.0"})
 
-(def ^:private default-timeout 30000)
-
-(defrecord Session [url version state]
+(defrecord Session [url version connection c-seq]
   IRequest
   (request! [this {:keys [path method headers body timeout]
-                   :or {path "", headers {}, body "", timeout default-timeout}}]
-    (let [{c-seq :c-seq
-           connection :connection} @state
-          rtsp-request {:url (rtsp/url-for-path url path)
+                   :or {path "", headers {}, body ""}}]
+    (let [rtsp-request {:url (rtsp/url-for-path url path)
                         :method method
                         :version version
-                        :c-seq c-seq
+                        :c-seq (swap! c-seq inc)
                         :headers headers
-                        :body body}
-          connection (if (and connection (transport/alive? connection))
-                       connection
-                       (transport/connect-to url))]
-      (if (transport/send! connection rtsp-request)
-        (do
-          (swap! state assoc :connection connection
-                             :c-seq (inc c-seq))
-          (transport/receive! connection timeout))
-        (do
-          (.close connection)
-          (swap! state dissoc :connection)
-          (deliver (promise) nil))))))
+                        :body body
+                        :timeout timeout}]
+      (request! connection rtsp-request))))
 
 (defn print-session [session writer]
   (.write writer (str "#Session" (select-keys session [:url :version]))))
@@ -52,12 +35,14 @@
   #(print-session % *out*))
 
 (defn session
-  "`session` creates a new RTSP session structure, optionally with the
+  "`session` creates a new RTSP session object, optionally with the
   specified `options`, that may be used to commnicate with the RTSP
   server at `url`."
   ([url] (session url {}))
   ([url options]
-   (let [options (assoc options :url (rtsp/split-url url))]
+   (let [url (rtsp/split-url url)
+         options (assoc options :url url
+                                :connection (connect-to url))]
      (map->Session (merge default-session options)))))
 
 (defmacro ^:private def-rtsp-method [method-name]
