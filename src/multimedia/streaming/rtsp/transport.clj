@@ -13,12 +13,10 @@
 (def default-timeout 30000)
 
 (defn wrap-duplex-stream
-  [tx-xform rx-xform wire]
-  (let [tx (s/stream 0 tx-xform)
-        rx (s/stream 0 rx-xform)]
-    (s/connect tx wire)
-    (s/connect wire rx)
-    (s/splice tx rx)))
+  [encoder decoder wire]
+  (let [tx (s/stream)]
+    (s/connect (s/map encoder tx) wire)
+    (s/splice tx (decoder wire))))
 
 (defrecord TcpConnection [url wire]
   IRequest

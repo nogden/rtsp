@@ -142,10 +142,10 @@
                identity
                merge-headers-and-body)}))
 
-(def encode-request (map #(io/encode (request :encoder) %)))
+(def encode-request (partial io/encode (request :encoder)))
 
-(def decode-request (map #(io/decode (request :decoder) %)))
+(def decode-request #(io/decode-stream % (request :decoder)))
 
-(def encode-response (map #(io/encode (response :encoder) %)))
+(def encode-response (partial io/encode (response :encoder)))
 
-(def decode-response (map #(io/decode (response :decoder) %)))
+(def decode-response #(io/decode-stream % (response :decoder)))
