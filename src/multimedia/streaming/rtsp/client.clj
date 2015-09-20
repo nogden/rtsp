@@ -16,8 +16,7 @@
     (let [rtsp-request {:url (rtsp/url-for-path url path)
                         :method method
                         :version version
-                        :c-seq (swap! c-seq inc)
-                        :headers headers
+                        :headers (assoc headers :c-seq (swap! c-seq inc))
                         :body body
                         :timeout timeout}]
       (request! connection rtsp-request))))

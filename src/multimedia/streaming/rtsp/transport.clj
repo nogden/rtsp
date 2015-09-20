@@ -24,8 +24,8 @@
   IRequest
   (request! [this request]
     (d/chain (or @wire (reset! wire (tcp/client url)))
-             #(wrap-duplex-stream rtsp/encode rtsp/decode %)
-             #(s/put! % request)
+             #(wrap-duplex-stream rtsp/encode-request rtsp/decode-response %)
+             #(do (s/put! % request) %)
              #(s/try-take! % (or (:timeout request) default-timeout)))))
 
 (defmulti connect-to

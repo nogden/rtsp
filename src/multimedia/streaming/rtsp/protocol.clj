@@ -3,7 +3,8 @@
   functions for marshalling between RTSP messages and ring-style
   requests and responses."
   (:require [clojure.string :as string]
-            [gloss.core :as codec])
+            [gloss.core :as codec :refer [defcodec]]
+            [gloss.io :as io])
   (:import [java.net URI]))
 
 (def default-port 554)
@@ -35,41 +36,116 @@
     path
     (str (join-url url) (ensure-absolute path))))
 
-(defn ->header
-  "`->header` converts a key-value pair into a header field."
+(defn lower-snake-case [string]
+  (-> string
+      (string/replace #"[^-][A-Z]" #(str (first %) \- (second %)))
+      string/lower-case))
+
+(defn upper-snake-case [string]
+  (if (re-matches #"(?i)c-seq" string)
+    "CSeq"
+    (->> (string/split string #"-")
+         (map string/capitalize)
+         (string/join \-))))
+
+(defn to-header
+  "`to-header` converts a key-value pair into a header field."
   [[k v]]
-  (let [field (if (re-matches #".*-.*" (name k))
-                (->> (string/split (name k) #"-")
-                     (map string/capitalize)
-                     (string/join \-))
-                (name k))
+  (let [field (-> k name upper-snake-case)
         value (if (vector? v) (string/join \, v) v)]
-    (str field ": " value)))
+    (string/join ": " [field value])))
 
-(defn with-content-length
-  "Returns `headers` with a `:content-length` entry appended suitable
-  for `body`."
-  [body headers]
+(defn header-string [header-map]
+  (str (->> header-map
+            (map to-header)
+            (string/join crlf))))
+
+(defn header-map [header-string]
+  (->> (string/split header-string (re-pattern crlf))
+       (map #(string/split % #": "))
+       (map (fn [[k v]] [(keyword (lower-snake-case k)) v]))
+       (into {})))
+
+(defn with-content-length [{headers :headers, body :body :as request}]
   (if (string/blank? body)
-    headers
-    (assoc headers :content-length (count (.getBytes body)))))
+    request
+    (assoc-in request [:headers :content-length] (count (.getBytes body)))))
 
-(defn encode
-  "`encode` takes a ring-like `request` map and encodes it into a
-  textual RTSP request."
-  [{:keys [method url c-seq version headers body]}]
-  (let [request-line (str method \space url \space version crlf)
-        header-list (str (->> headers
-                              (with-content-length body)
-                              (#(assoc % :CSeq c-seq))
-                              (map ->header)
-                              (string/join crlf))
-                         crlf
-                         crlf)
-        body (if (string/blank? body) body (str crlf body))]
-    (str request-line
-         header-list
-         body)))
+;; For when Gloss is fixed to handle this case.
+;;
+;; (def headers
+;;   (let [key (codec/string :ascii :delimiters [": "])
+;;         value (codec/string :ascii :delimiters [crlf])]
+;;     (codec/repeated [key value] :delimiters [(str crlf crlf)])))
 
-(defn decode [value]
-  (String. value))
+(defn make-body-codec [headers]
+  (codec/ordered-map :headers headers
+                     :body (codec/string
+                            :utf-8
+                            :length (Integer. (:content-length headers 0)))))
+
+(defn write-only [_]
+  (UnsupportedOperationException. "Codec does not support reading"))
+
+(defn merge-headers-and-body [result]
+  (dissoc (merge result (:rest result)) :rest))
+
+(def headers
+  (codec/compile-frame
+   (codec/string :ascii :delimiters [(str crlf crlf)])
+   header-string
+   header-map))
+
+(def request
+  (let [method (codec/string :ascii :delimiters [\space])
+        url (codec/string :ascii :delimiters [\space])
+        version (codec/string :ascii :delimiters [crlf])
+        body (codec/string :utf-8)]
+    {:encoder (codec/compile-frame
+               (codec/ordered-map :method method
+                                  :url url
+                                  :version version
+                                  :headers headers
+                                  :body body)
+               with-content-length
+               identity)
+     :decoder (codec/compile-frame
+               (codec/ordered-map :method method
+                                  :url url
+                                  :version version
+                                  :rest (codec/header headers
+                                                      make-body-codec
+                                                      write-only))
+               identity
+               merge-headers-and-body)}))
+
+(def response
+  (let [version (codec/string :ascii :delimiters [\space])
+        status (codec/string-integer :ascii :delimiters [\space])
+        reason (codec/string :ascii :delimiters [crlf])
+        body (codec/string :utf-8)]
+    {:encoder (codec/compile-frame
+               (codec/ordered-map :version version
+                                  :status status
+                                  :reason reason
+                                  :headers headers
+                                  :body body)
+               with-content-length
+               identity)
+     :decoder (codec/compile-frame
+               (codec/ordered-map :version version
+                                  :status status
+                                  :reason reason
+                                  :rest (codec/header headers
+                                                      make-body-codec
+                                                      write-only))
+               identity
+               merge-headers-and-body)}))
+
+(def encode-request (map #(io/encode (request :encoder) %)))
+
+(def decode-request (map #(io/decode (request :decoder) %)))
+
+(def encode-response (map #(io/encode (response :encoder) %)))
+
+(def decode-response (map #(io/decode (response :decoder) %)))
