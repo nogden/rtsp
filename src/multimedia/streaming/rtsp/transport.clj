@@ -18,13 +18,25 @@
     (s/connect (s/map encoder tx) wire)
     (s/splice tx (decoder wire))))
 
+(defn existing-connection [connection]
+  (when (and @connection (not (s/closed? @connection)))
+    @connection))
+
+(defn create-connection! [connection url]
+  (d/chain (tcp/client url)
+           #(wrap-duplex-stream rtsp/encode-request rtsp/decode-response %)
+           #(reset! connection %)))
+
 (defrecord TcpConnection [url wire]
   IRequest
   (request! [this request]
-    (d/chain (or @wire (reset! wire (tcp/client url)))
-             #(wrap-duplex-stream rtsp/encode-request rtsp/decode-response %)
+    (d/chain (or (existing-connection wire)
+                 (create-connection! wire url))
              #(do (s/put! % request) %)
-             #(s/try-take! % (or (:timeout request) default-timeout)))))
+             #(s/try-take! % (or (:timeout request) default-timeout))))
+  java.io.Closeable
+  (close [this] (when (existing-connection wire)
+                  (swap! wire s/close!))))
 
 (defmulti connect-to
   "`connect-to` returns an object that implements `IRequest`, which
