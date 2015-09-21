@@ -23,9 +23,12 @@
     @connection))
 
 (defn create-connection! [connection url]
-  (d/chain (tcp/client url)
-           #(wrap-duplex-stream rtsp/encode-request rtsp/decode-response %)
-           #(reset! connection %)))
+  (-> (d/chain (tcp/client url)
+               #(wrap-duplex-stream rtsp/encode-request rtsp/decode-response %)
+               #(reset! connection %))
+      (d/catch io.netty.channel.ConnectTimeoutException
+               #(d/error-deferred
+                 (java.net.SocketTimeoutException. (.getMessage %))))))
 
 (defrecord TcpConnection [url wire]
   IRequest
