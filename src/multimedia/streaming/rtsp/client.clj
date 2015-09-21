@@ -19,9 +19,13 @@
                         :headers (assoc headers :c-seq (swap! c-seq inc))
                         :body body
                         :timeout timeout}]
-      (request! connection rtsp-request))))
+      (request! connection rtsp-request)))
+  java.io.Closeable
+  (close [this]
+    (.close connection)
+    (reset! c-seq 0)))
 
-(defn print-session [session writer]
+(defn- print-session [session writer]
   (.write writer (str "#Session" (select-keys session [:url :version]))))
 
 (defmethod print-method Session [session ^java.io.Writer writer]
@@ -76,3 +80,5 @@
 (def-rtsp-method setup)
 (def-rtsp-method set-parameter)
 (def-rtsp-method teardown)
+
+(defn close! [session] (.close session))
