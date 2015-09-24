@@ -4,6 +4,8 @@
             [manifold.deferred :as d]
             [manifold.stream :as s]))
 
+;; Interface to be used by all protocols.
+
 (defprotocol IRequest
   "An object that is able to issue requests."
   (request! [this request]
@@ -11,6 +13,14 @@
      the response."))
 
 (def default-timeout 30000)
+
+(defmulti connect-to
+  "`connect-to` returns an object that implements `IRequest`, which
+  can be used to issue requests to the peer at `url` using the
+  protocol defined by the url."
+  :protocol)
+
+;; TCP support
 
 (defn wrap-duplex-stream
   [encoder decoder wire]
@@ -40,12 +50,6 @@
   java.io.Closeable
   (close [this] (when (existing-connection wire)
                   (swap! wire s/close!))))
-
-(defmulti connect-to
-  "`connect-to` returns an object that implements `IRequest`, which
-  can be used to issue requests to the peer at `url` using the
-  protocol defined by the url."
-  :protocol)
 
 (defmethod connect-to "rtsp" [url]
   (->TcpConnection url (atom nil)))
