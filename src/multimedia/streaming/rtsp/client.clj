@@ -62,14 +62,7 @@
         (request! ~s (assoc ~o :method ~verb#
                                :path ~p))))))
 
-(defn options!
-  "Sends an RTSP OPTIONS request to the peer described by `session`
-  and returns a promise that will yield the response."
-  ([session] (options! session {}))
-  ([session options]
-   (request! session (assoc options :method "OPTIONS"
-                                    :path "*"))))
-
+(def-rtsp-method options)
 (def-rtsp-method describe)
 (def-rtsp-method announce)
 (def-rtsp-method get-parameter)
