@@ -55,13 +55,16 @@
         value (if (vector? v) (string/join \, v) v)]
     (string/join ": " [field value])))
 
+(defn unfold-headers [header-string]
+  (string/replace header-string #"\r?\n\s+" " "))
+
 (defn header-string [header-map]
   (str (->> header-map
             (map to-header)
             (string/join crlf))))
 
 (defn header-map [header-string]
-  (->> (string/split header-string (re-pattern crlf))
+  (->> (string/split (unfold-headers header-string) (re-pattern crlf))
        (map #(string/split % #": "))
        (map (fn [[k v]] [(keyword (lower-snake-case k)) v]))
        (into {})))
