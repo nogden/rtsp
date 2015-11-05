@@ -3,7 +3,6 @@
  :resource-paths #{"src"}
  :dependencies '[[org.clojure/clojure "1.7.0"]
                  [org.clojure/tools.logging "0.3.1"]
-                 [dire "0.5.3"]
                  [gloss "0.2.5"]
                  [aleph "0.4.0"]
                  ;; Dev dependencies
