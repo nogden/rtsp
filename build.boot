@@ -13,8 +13,8 @@
  pom
  {:project 'multimedia.streaming/rtsp
   :version "0.1.0-SNAPSHOT"
-  :description "A client and server for the Real Time Streaming Protocol (RTSP)
-                as described by RFC 2326."
+  :description "An asynchronous client and server for the Real Time
+                Streaming Protocol (RTSP) as described by RFC 2326."
   :url "http://nogden.github.io/rtsp/"
   :scm {:url "https://github.com/nogden/rtsp"}
   :license {"Eclipse Public License"
