@@ -7,7 +7,8 @@ server for the Real Time Streaming Protocol (RTSP) as described by
 
 Available on Clojars:
 
-Link goes here.
+[![Clojars Project](http://clojars.org/multimedia.streaming/rtsp/latest-version.svg)]
+(http://clojars.org/multimedia.streaming/rtsp)
 
 ## Documentation
 
